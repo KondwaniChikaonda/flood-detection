@@ -146,8 +146,11 @@ const MapComponent: React.FC = () => {
 
     try {
       const res = await fetch(`/api/risk?lat=${lat}&lng=${lng}&rainfall=${rainfall}`);
-      const data = await res.json();
-      setRiskInfo(data);
+  const data = await res.json();
+  // attach date info: current date and a deterministic predicted flood date based on risk
+  const now = new Date();
+  const predicted = predictFloodDateFromRisk(data.risk, now);
+  setRiskInfo({ ...data, currentDate: now.toISOString(), predictedFloodDate: predicted.toISOString() });
     } catch (err) {
       console.error("risk api failed", err);
     }
@@ -161,14 +164,19 @@ const MapComponent: React.FC = () => {
       setSearchResults(data);
       if (data?.features?.length && mapRef.current) {
         const feat = data.features[0];
-        const center = getFeatureCenter(feat);
-        if (center) {
-          const [lng, lat] = center;
-          if (mapRef.current && typeof mapRef.current.flyTo === 'function') {
-            mapRef.current.flyTo([lat, lng], 12);
-          }
+        const bounds = getFeatureBounds(feat);
+        if (bounds && mapRef.current && typeof mapRef.current.fitBounds === 'function') {
+          mapRef.current.fitBounds(bounds as any);
         } else {
-          console.warn('search result has no usable centroid', feat);
+          const center = getFeatureCenter(feat);
+          if (center) {
+            const [lng, lat] = center;
+            if (mapRef.current && typeof mapRef.current.flyTo === 'function') {
+              mapRef.current.flyTo([lat, lng], 12);
+            }
+          } else {
+            console.warn('search result has no usable centroid', feat);
+          }
         }
       }
 
@@ -193,7 +201,9 @@ const MapComponent: React.FC = () => {
               if (r.risk >= 75) advice = 'High risk — move to higher ground and follow local authority orders';
               else if (r.risk >= 40) advice = 'Moderate risk — avoid low-lying areas and monitor updates';
               else advice = 'Low risk — stay informed';
-              return { feature: f, risk: r.risk, advice };
+              const now = new Date();
+              const predicted = predictFloodDateFromRisk(r.risk, now);
+              return { feature: f, risk: r.risk, advice, currentDate: now.toISOString(), predictedFloodDate: predicted.toISOString() };
             } catch (e) {
               return { feature: f, risk: null, advice: 'Risk check failed' };
             }
@@ -222,6 +232,48 @@ const MapComponent: React.FC = () => {
     }
   };
 
+  const getFeatureBounds = (feat: any): [[number, number],[number, number]] | null => {
+    if (!feat || !feat.geometry) return null;
+    try {
+      const geom = feat.geometry;
+      const coordsToLatLng = (c: any) => [c[1], c[0]] as [number, number];
+      let latlngs: [number, number][] = [];
+      if (geom.type === 'Point') latlngs = [coordsToLatLng(geom.coordinates)];
+      else if (geom.type === 'LineString') latlngs = geom.coordinates.map((c: any) => coordsToLatLng(c));
+      else if (geom.type === 'Polygon') latlngs = geom.coordinates.flat(1).map((c: any) => coordsToLatLng(c));
+      else if (geom.type === 'MultiPolygon') latlngs = geom.coordinates.flat(2).map((c: any) => coordsToLatLng(c));
+      if (latlngs.length === 0) return null;
+      const lats = latlngs.map((p) => p[0]);
+      const lngs = latlngs.map((p) => p[1]);
+      const southWest: [number, number] = [Math.min(...lats), Math.min(...lngs)];
+      const northEast: [number, number] = [Math.max(...lats), Math.max(...lngs)];
+      return [southWest, northEast];
+    } catch (e) {
+      return null;
+    }
+  };
+
+  // format ISO string or Date to readable local string
+  const formatDate = (isoOrDate?: string | Date | null) => {
+    if (!isoOrDate) return 'n/a';
+    const d = typeof isoOrDate === 'string' ? new Date(isoOrDate) : isoOrDate;
+    if (isNaN(d.getTime())) return 'n/a';
+    return d.toLocaleString();
+  };
+
+  // deterministic predicted flood date based on risk score
+  // - Higher risk => sooner predicted date. This is a simple heuristic for UI only.
+  // Inputs: risk numeric 0-100, base Date (now)
+  const predictFloodDateFromRisk = (risk: number | null | undefined, baseDate: Date = new Date()) => {
+    const b = baseDate || new Date();
+    const r = typeof risk === 'number' && !isNaN(risk) ? Math.max(0, Math.min(100, risk)) : 0;
+    // map risk to days: 0 -> +14 days, 25 -> +10, 50 -> +5, 75 -> +2, 100 -> +1
+    const days = r >= 75 ? 1 : r >= 50 ? 2 : r >= 25 ? 5 : r >= 10 ? 10 : 14;
+    const predicted = new Date(b.getTime());
+    predicted.setDate(predicted.getDate() + days);
+    return predicted;
+  };
+
   const scanVisibleArea = async () => {
     if (!mapRef.current) return;
     const bounds = mapRef.current.getBounds();
@@ -247,8 +299,8 @@ const MapComponent: React.FC = () => {
         if (coord) {
           const lng = coord[0];
           const lat = coord[1];
-          if (bounds.contains([lat, lng])) {
-            candidates.push({ id: f.properties?.id || `${type}-${i}`, geom: coord, type, props: f.properties });
+            if (bounds.contains([lat, lng])) {
+            candidates.push({ id: f.properties?.id || `${type}-${i}`, geom: coord, type, props: { ...f.properties, __originalFeature: f } });
           }
         }
         if (candidates.length > 200) break;
@@ -272,8 +324,11 @@ const MapComponent: React.FC = () => {
       const rainfall = nearestRain?.p?.intensity || 0;
       try {
         const res = await fetch(`/api/risk?lat=${lat}&lng=${lng}&rainfall=${rainfall}`);
-        const data = await res.json();
-        results.push({ feature: c, risk: data.risk, dist_m: data.dist_m, rainfall: data.rainfall });
+  const data = await res.json();
+  // compute predicted date for client-side display
+  const now = new Date();
+  const predicted = predictFloodDateFromRisk(data.risk, now);
+  results.push({ feature: c, risk: data.risk, dist_m: data.dist_m, rainfall: data.rainfall, currentDate: now.toISOString(), predictedFloodDate: predicted.toISOString() });
       } catch (e) {
         console.error('scan risk error', e);
       }
@@ -338,10 +393,15 @@ const MapComponent: React.FC = () => {
                       <li key={idx} style={{ marginBottom: 6 }}>
                         <button
                           onClick={() => {
-                            const center = getFeatureCenter(f);
-                            if (center && mapRef.current && typeof mapRef.current.flyTo === 'function') {
-                              const [lng, lat] = center;
-                              mapRef.current.flyTo([lat, lng], 12);
+                            const bounds = getFeatureBounds(f);
+                            if (bounds && mapRef.current && typeof mapRef.current.fitBounds === 'function') {
+                              mapRef.current.fitBounds(bounds as any);
+                            } else {
+                              const center = getFeatureCenter(f);
+                              if (center && mapRef.current && typeof mapRef.current.flyTo === 'function') {
+                                const [lng, lat] = center;
+                                mapRef.current.flyTo([lat, lng], 12);
+                              }
                             }
                           }}
                           style={{ background: 'transparent', border: 'none', textAlign: 'left', padding: 0, cursor: 'pointer', color: '#000', fontWeight: 700 }}
@@ -388,10 +448,18 @@ const MapComponent: React.FC = () => {
                   <div style={{ fontWeight: 800 }}>{s.feature.type} {s.feature.props?.ta_name || s.feature.props?.district || s.feature.props?.name || ''}</div>
                   <button
                     onClick={() => {
-                      const c = s.feature.geom;
-                      if (c && mapRef.current && typeof mapRef.current.flyTo === 'function') {
-                        const [lng, lat] = c;
-                        mapRef.current.flyTo([lat, lng], 12);
+                      // try to fit bounds to the underlying feature if available
+                      const feature = s.feature;
+                      const f = feature && feature.props && feature.props.__originalFeature ? feature.props.__originalFeature : null;
+                      const bounds = f ? getFeatureBounds(f) : null;
+                      if (bounds && mapRef.current && typeof mapRef.current.fitBounds === 'function') {
+                        mapRef.current.fitBounds(bounds as any);
+                      } else {
+                        const c = s.feature.geom;
+                        if (c && mapRef.current && typeof mapRef.current.flyTo === 'function') {
+                          const [lng, lat] = c;
+                          mapRef.current.flyTo([lat, lng], 12);
+                        }
                       }
                     }}
                     style={{ padding: '4px 8px', fontSize: 12 }}

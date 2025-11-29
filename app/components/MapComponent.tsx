@@ -74,7 +74,8 @@ const MapComponent: React.FC = () => {
   const [roadsGeo, setRoadsGeo] = useState<any | null>(null);
   const [districtsGeo, setDistrictsGeo] = useState<any | null>(null);
   const [searchQ, setSearchQ] = useState("");
-  const [searchLayer, setSearchLayer] = useState<'districts'|'roads'|'rivers'>('districts');
+  const [searchLayer, setSearchLayer] = useState<'districts'|'roads'|'rivers'|'areas'>('districts');
+  const [searchDistrict, setSearchDistrict] = useState('');
   const [searchResults, setSearchResults] = useState<any | null>(null);
   const [riskInfo, setRiskInfo] = useState<any | null>(null);
   const [scanResults, setScanResults] = useState<any[]>([]);
@@ -159,7 +160,8 @@ const MapComponent: React.FC = () => {
   const onSearch = async () => {
     if (!searchQ) return;
     try {
-  const res = await fetch(`/api/search?q=${encodeURIComponent(searchQ)}&layer=${encodeURIComponent(searchLayer)}`);
+  const districtParam = searchLayer === 'areas' && searchDistrict ? `&district=${encodeURIComponent(searchDistrict)}` : '';
+  const res = await fetch(`/api/search?q=${encodeURIComponent(searchQ)}&layer=${encodeURIComponent(searchLayer)}${districtParam}`);
       const data = await res.json();
       setSearchResults(data);
       if (data?.features?.length && mapRef.current) {
@@ -372,7 +374,11 @@ const MapComponent: React.FC = () => {
                 <option value="districts">Districts</option>
                 <option value="roads">Roads</option>
                 <option value="rivers">Rivers</option>
+                <option value="areas">Areas (TA3)</option>
               </select>
+              {searchLayer === 'areas' && (
+                <input value={searchDistrict} onChange={(e) => setSearchDistrict(e.target.value)} placeholder="Filter by district" style={{ padding: 8, marginLeft: 8 }} />
+              )}
             </div>
             <div style={{ display: 'flex', marginTop: 8 }}>
               <button onClick={onSearch} style={{ flex: 1, padding: 8 }}>Search</button>
@@ -385,7 +391,7 @@ const MapComponent: React.FC = () => {
                 <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 6 }}>Search results</div>
                 <ul style={{ maxHeight: 180, overflow: 'auto', paddingLeft: 12 }}>
                   {searchResults.features.map((f: any, idx: number) => {
-                    const name = f.properties?.ta_name || f.properties?.district || f.properties?.name || f.properties?.name_en || `Feature ${idx}`;
+                    const name = f.properties?.ta3_name || f.properties?.TA3_name || f.properties?.ta_name || f.properties?.district || f.properties?.name || f.properties?.name_en || `Feature ${idx}`;
                     const area = f.properties?.area || f.properties?.perimeter || '';
                     const osm = f.properties?.osm_id || f.properties?.gid || '';
                     const enriched = searchResults.enriched && searchResults.enriched.find((e: any) => e.feature === f);

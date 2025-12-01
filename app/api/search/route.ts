@@ -6,8 +6,10 @@ export async function GET(req: Request) {
   const q = url.searchParams.get('q') || '';
   const layer = url.searchParams.get('layer') || 'districts';
   const districtFilter = url.searchParams.get('district') || '';
+  const limitParam = url.searchParams.get('limit') || '';
 
-  if (!q) return NextResponse.json({ features: [] });
+  // allow empty query when asking for default top areas
+  if (!q && layer !== 'areas') return NextResponse.json({ features: [] });
 
   try {
     // whitelist allowed tables to avoid SQL injection
@@ -37,17 +39,35 @@ export async function GET(req: Request) {
       whereClause = `(to_jsonb(t)::text ILIKE $1)`; // fallback: search any text
     }
 
-    const sql = `
-      SELECT id, ST_AsGeoJSON(geom)::json AS geom_geojson, to_jsonb(t) - 'geom' AS props
-      FROM (
-        SELECT * FROM ${table}
-        WHERE ${whereClause}
-        AND geom IS NOT NULL
-        LIMIT 100
-      ) t;
-    `;
-
-    const params = districtFilter && layer === 'areas' ? [`%${q}%`, `%${districtFilter}%`] : [`%${q}%`];
+    // If asking for default areas (no q) return top 5 by risk_score
+    let sql: string;
+    let params: any[];
+  const limit = limitParam ? parseInt(limitParam, 10) || 5 : 5;
+  if (layer === 'areas' && !q) {
+      sql = `
+        SELECT id, ST_AsGeoJSON(geom)::json AS geom_geojson, to_jsonb(t) - 'geom' AS props
+        FROM (
+          SELECT * FROM ${table}
+          WHERE geom IS NOT NULL
+      ORDER BY "risk_score" DESC NULLS LAST
+      LIMIT ${limit}
+        ) t;
+      `;
+      params = [];
+    } else {
+      const orderByRisk = table === 'districts_enum' ? `ORDER BY "risk_score" DESC NULLS LAST` : '';
+      sql = `
+        SELECT id, ST_AsGeoJSON(geom)::json AS geom_geojson, to_jsonb(t) - 'geom' AS props
+        FROM (
+          SELECT * FROM ${table}
+          WHERE ${whereClause}
+          AND geom IS NOT NULL
+          ${orderByRisk}
+          LIMIT 100
+        ) t;
+      `;
+      params = districtFilter && layer === 'areas' ? [`%${q}%`, `%${districtFilter}%`] : [`%${q}%`];
+    }
 
     const res = await pool.query(sql, params);
     const features = res.rows

@@ -136,6 +136,28 @@ const MapComponent: React.FC = () => {
     load();
   }, []);
 
+  // populate top-10 high-risk areas on load so Scan panel shows something
+  useEffect(() => {
+    const loadTopAreas = async () => {
+      try {
+        const res = await fetch('/api/search?layer=areas&limit=10');
+        const data = await res.json();
+        if (data?.features?.length) {
+          const fallback = data.features.map((f: any) => {
+            const r = f.properties?.risk_score ?? null;
+            const now = new Date();
+            const predicted = predictFloodDateFromRisk(r, now);
+            return { feature: { id: f.properties?.id || f.properties?.gid || '', props: f.properties }, risk: r, dist_m: null, rainfall: null, currentDate: now.toISOString(), predictedFloodDate: predicted.toISOString() };
+          });
+          setScanResults(fallback.slice(0, 10));
+        }
+      } catch (e) {
+        console.error('load top areas failed', e);
+      }
+    };
+    loadTopAreas();
+  }, []);
+
   const onMapClick = async (lat: number, lng: number) => {
     // use latest rainfall at nearest point
     const nearestRain = rainfallData.reduce((acc, p) => {
@@ -158,11 +180,11 @@ const MapComponent: React.FC = () => {
   };
 
   const onSearch = async () => {
-    if (!searchQ) return;
+    if (!searchQ && searchLayer !== 'areas') return;
     try {
   const districtParam = searchLayer === 'areas' && searchDistrict ? `&district=${encodeURIComponent(searchDistrict)}` : '';
   const res = await fetch(`/api/search?q=${encodeURIComponent(searchQ)}&layer=${encodeURIComponent(searchLayer)}${districtParam}`);
-      const data = await res.json();
+  const data = await res.json();
       setSearchResults(data);
       if (data?.features?.length && mapRef.current) {
         const feat = data.features[0];
@@ -182,9 +204,9 @@ const MapComponent: React.FC = () => {
         }
       }
 
-      // enrich top search results with risk and advice
+      // enrich top search results with risk and advice (limit to top 5 for areas)
       try {
-        const top = data.features.slice(0, 8);
+  const top = data.features ? data.features.slice(0, searchLayer === 'areas' ? 5 : (searchLayer === 'districts' ? 10 : 8)) : [];
         const enriched = await Promise.all(
           top.map(async (f: any) => {
             const c = getFeatureCenter(f);
@@ -313,6 +335,27 @@ const MapComponent: React.FC = () => {
     addFeatures(roadsGeo, 'road');
     addFeatures(riversGeo, 'river');
 
+    // if no candidates found, fall back to server-provided top areas by risk
+    if (candidates.length === 0) {
+      try {
+        const res = await fetch(`/api/search?layer=areas&limit=10`);
+        const data = await res.json();
+        if (data?.features?.length) {
+          // map features to results array, using any existing risk_score property
+          const fallback = data.features.map((f: any) => {
+            const r = f.properties?.risk_score ?? null;
+            const now = new Date();
+            const predicted = predictFloodDateFromRisk(r, now);
+            return { feature: { id: f.properties?.id || f.properties?.gid || '', props: f.properties }, risk: r, dist_m: null, rainfall: null, currentDate: now.toISOString(), predictedFloodDate: predicted.toISOString() };
+          });
+          setScanResults(fallback.slice(0, 10));
+          return;
+        }
+      } catch (e) {
+        console.error('fallback top areas fetch failed', e);
+      }
+    }
+
     // request risk for candidates (batch up to 80 to avoid flooding endpoint)
     const toCheck = candidates.slice(0, 80);
     const results: any[] = [];
@@ -416,7 +459,10 @@ const MapComponent: React.FC = () => {
                         </button>
                         <div style={{ fontSize: 12, color: '#333' }}>{area ? `Area: ${area}` : ''} {osm ? ` • OSM: ${osm}` : ''}</div>
                         {enriched && (
-                          <div style={{ fontSize: 12, marginTop: 4 }}><strong>Risk:</strong> {enriched.risk ?? 'n/a'} — <em>{enriched.advice}</em></div>
+                          <div style={{ fontSize: 12, marginTop: 4 }}>
+                            <div><strong>Risk:</strong> {enriched.risk ?? 'n/a'} — <em>{enriched.advice}</em></div>
+                            <div style={{ fontSize: 11 }}>Now: {formatDate(enriched.currentDate)} • Predicted: {formatDate(enriched.predictedFloodDate)}</div>
+                          </div>
                         )}
                       </li>
                     );
@@ -451,7 +497,12 @@ const MapComponent: React.FC = () => {
             {scanResults.map((s, idx) => (
               <li key={idx} style={{ marginBottom: 8, color: '#000' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ fontWeight: 800 }}>{s.feature.type} {s.feature.props?.ta_name || s.feature.props?.district || s.feature.props?.name || ''}</div>
+                  {(() => {
+                    const props = s.feature?.props || {};
+                    const areaName = props?.TA3_name || props?.ta3_name || props?.TA || props?.ta || props?.ta_name || props?.name || props?.name_en || `Area ${idx + 1}`;
+                    const districtName = props?.DISTRICT || props?.district || '';
+                    return (<div style={{ fontWeight: 800 }}>{s.feature.type} {areaName}{districtName ? ` — ${districtName}` : ''}</div>);
+                  })()}
                   <button
                     onClick={() => {
                       // try to fit bounds to the underlying feature if available

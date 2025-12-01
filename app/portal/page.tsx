@@ -6,16 +6,48 @@ export default function PortalPage() {
   const [alerts, setAlerts] = useState<any[]>([]);
   const [lastUpdate, setLastUpdate] = useState<string>('');
   const [recentActivity, setRecentActivity] = useState<any[]>([]);
+  const [rainfallData, setRainfallData] = useState<any[]>([]);
+
+  // Load rainfall data
+  useEffect(() => {
+    const fetchRainfall = async () => {
+      try {
+        const res = await fetch(
+          `https://api.open-meteo.com/v1/forecast?latitude=-13.9626&longitude=33.75&hourly=precipitation`
+        );
+        const data = await res.json();
+        const hourly = data.hourly?.precipitation || [];
+        const times = data.hourly?.time || [];
+        const intensity = hourly[hourly.length - 1] || 0;
+        const time = times[times.length - 1] || new Date().toISOString();
+
+        const points: any[] = [];
+        const step = 0.7;
+        const MalawiBbox = { minLat: -16.0, maxLat: -9.25, minLng: 32.67, maxLng: 35.92 };
+        for (let lat = MalawiBbox.minLat; lat <= MalawiBbox.maxLat; lat += step) {
+          for (let lng = MalawiBbox.minLng; lng <= MalawiBbox.maxLng; lng += step) {
+            const variation = (Math.random() - 0.5) * 2;
+            points.push({ lat, lng, intensity: Math.max(intensity + variation, 0), time });
+          }
+        }
+        setRainfallData(points);
+      } catch (err) {
+        console.error("Error fetching precipitation", err);
+      }
+    };
+    fetchRainfall();
+  }, []);
 
   useEffect(() => {
-  // placeholder alerts removed; alerts will be generated from recentActivity once it's loaded
+    if (rainfallData.length === 0) return;
+
     // set client-side last update string to avoid SSR/CSR mismatch
     setLastUpdate(new Date().toLocaleString());
 
     // fetch top risk areas for recent activity and enrich with district, risk and predicted date
     (async () => {
       try {
-        const res = await fetch('/api/search?layer=areas&limit=5&includeGeom=true');
+        const res = await fetch('/api/search?layer=areas&limit=10&includeGeom=true');
         const data = await res.json();
         if (data?.features) {
           // map and enrich each feature
@@ -23,51 +55,56 @@ export default function PortalPage() {
             const props = f.properties || {};
             const name = props?.TA3_name || props?.ta3_name || props?.TA || props?.ta || props?.name || 'Unknown';
             const district = props?.DISTRICT || props?.district || props?.district_name || 'Unknown';
-            // prefer server-provided risk_score if present
+
             let risk: number | null = null;
-            if (typeof props?.risk_score === 'number') risk = props.risk_score;
+            let rainfall: number | null = null;
 
-            // if no risk_score, attempt to compute by calling /api/risk for the feature centroid
-            if (risk === null) {
-              try {
-                // compute centroid from geometry if available
-                let lat: number | undefined;
-                let lng: number | undefined;
-                if (f.geometry && f.geometry.type && f.geometry.coordinates) {
-                  // handle Polygon/MultiPolygon/Point/LineString simply by taking first coordinate
-                  const geom = f.geometry;
-                  if (geom.type === 'Point') {
-                    lng = geom.coordinates[0];
-                    lat = geom.coordinates[1];
-                  } else if (Array.isArray(geom.coordinates)) {
-                    // dig into nested arrays to find a coordinate pair
-                    let pair: any = null;
-                    const findPair = (arr: any): any => {
-                      if (!Array.isArray(arr)) return null;
-                      if (typeof arr[0] === 'number' && typeof arr[1] === 'number') return arr;
-                      for (const item of arr) {
-                        const p = findPair(item);
-                        if (p) return p;
-                      }
-                      return null;
-                    };
-                    pair = findPair(geom.coordinates);
-                    if (pair) {
-                      lng = pair[0];
-                      lat = pair[1];
-                    }
+            // compute centroid from geometry if available
+            let lat: number | undefined;
+            let lng: number | undefined;
+            if (f.geometry && f.geometry.type && f.geometry.coordinates) {
+              const geom = f.geometry;
+              // Simple centroid logic
+              if (geom.type === 'Point') {
+                lng = geom.coordinates[0];
+                lat = geom.coordinates[1];
+              } else if (Array.isArray(geom.coordinates)) {
+                const findPair = (arr: any): any => {
+                  if (!Array.isArray(arr)) return null;
+                  if (typeof arr[0] === 'number' && typeof arr[1] === 'number') return arr;
+                  for (const item of arr) {
+                    const p = findPair(item);
+                    if (p) return p;
                   }
+                  return null;
+                };
+                const pair = findPair(geom.coordinates);
+                if (pair) {
+                  lng = pair[0];
+                  lat = pair[1];
+                }
+              }
+            }
 
-                }
-                if (lat !== undefined && lng !== undefined) {
-                  const rres = await fetch(`/api/risk?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}`);
-                  const rdata = await rres.json();
-                  if (rdata && typeof rdata.risk === 'number') risk = Math.round(rdata.risk);
-                }
+            if (lat !== undefined && lng !== undefined) {
+              // Find nearest rainfall
+              const nearestRain = rainfallData.reduce((acc, p) => {
+                const d = Math.hypot(p.lat - lat!, p.lng - lng!);
+                return d < acc.d ? { p, d } : acc;
+              }, { p: rainfallData[0], d: Infinity } as any);
+              rainfall = nearestRain?.p?.intensity || 0;
+
+              try {
+                const rres = await fetch(`/api/risk?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}&rainfall=${rainfall}`);
+                const rdata = await rres.json();
+                if (rdata && typeof rdata.risk === 'number') risk = Math.round(rdata.risk);
               } catch (err) {
                 console.warn('failed to fetch risk for feature', err);
               }
             }
+
+            // Fallback to server risk if calculation failed
+            if (risk === null && typeof props?.risk_score === 'number') risk = props.risk_score;
 
             // compute predicted date from risk (simple heuristic)
             const predictFloodDateFromRisk = (r: number | null, base = new Date()) => {
@@ -87,18 +124,28 @@ export default function PortalPage() {
               name,
               district,
               risk,
+              rainfall,
               predictedDate,
               description,
             };
           });
 
           const items = await Promise.all(enrichPromises);
+
+          // Sort by risk (descending)
+          items.sort((a, b) => {
+            const riskA = a.risk ?? -1;
+            const riskB = b.risk ?? -1;
+            return riskB - riskA;
+          });
+
           setRecentActivity(items);
+
           // generate alerts from high-risk recentActivity
           const generatedAlerts: any[] = items.flatMap((it) => {
-            if (!it || typeof it.risk !== 'number') return [];
-            const level = it.risk >= 80 ? 'High' : it.risk >= 60 ? 'Moderate' : it.risk >= 40 ? 'Watch' : 'Low';
-            const msg = `${it.name} (${it.district}) — risk ${it.risk}. ${it.description}`;
+            if (!it || typeof it.risk !== 'number' || it.risk < 40) return []; // Only alert for risk >= 40
+            const level = it.risk >= 80 ? 'High' : it.risk >= 60 ? 'Moderate' : 'Watch';
+            const msg = `${it.name} (${it.district}) — risk ${it.risk}%. Rainfall: ${it.rainfall?.toFixed(1)}mm. ${it.description}`;
             return [{ id: `a-${it.id}`, level, message: msg, time: new Date().toISOString(), areaId: it.id }];
           });
           if (generatedAlerts.length) setAlerts(generatedAlerts);
@@ -107,7 +154,7 @@ export default function PortalPage() {
         console.error('fetch recent activity failed', e);
       }
     })();
-  }, []);
+  }, [rainfallData]);
 
   const exportCSV = (rows: any[], filename = 'export.csv') => {
     if (!rows || rows.length === 0) return;
@@ -154,7 +201,7 @@ export default function PortalPage() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 16 }}>
         <div style={{ background: '#fff', borderRadius: 10, padding: 16, boxShadow: '0 6px 18px rgba(20,40,80,0.04)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2L15 8H9L12 2Z" fill="#ff7043"/><path d="M12 22V9" stroke="#000" strokeWidth="1.2" strokeLinecap="round"/></svg>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2L15 8H9L12 2Z" fill="#ff7043" /><path d="M12 22V9" stroke="#000" strokeWidth="1.2" strokeLinecap="round" /></svg>
             <div>
               <div style={{ fontSize: 12, color: '#666' }}>Active Alerts</div>
               <div style={{ fontSize: 20, fontWeight: 800 }}>{alerts.length}</div>
@@ -164,14 +211,15 @@ export default function PortalPage() {
 
         <div style={{ background: '#fff', borderRadius: 10, padding: 16, boxShadow: '0 6px 18px rgba(20,40,80,0.04)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10" stroke="#000" strokeWidth="1.2"/><path d="M8 12h8" stroke="#000" strokeWidth="1.2" strokeLinecap="round"/></svg>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10" stroke="#000" strokeWidth="1.2" /><path d="M8 12h8" stroke="#000" strokeWidth="1.2" strokeLinecap="round" /></svg>
             <div>
               <div style={{ fontSize: 12, color: '#666' }}>Top Risk Area</div>
               <div style={{ fontSize: 16, fontWeight: 700 }}>{recentActivity[0]?.name ?? 'N/A'}</div>
               {recentActivity[0] && (
                 <div style={{ fontSize: 12, color: '#444', marginTop: 4 }}>
                   {recentActivity[0].district ? `District: ${recentActivity[0].district}` : ''}
-                  {recentActivity[0].risk !== null && recentActivity[0].risk !== undefined ? ` • Risk: ${recentActivity[0].risk}` : ''}
+                  {recentActivity[0].risk !== null && recentActivity[0].risk !== undefined ? ` • Risk: ${recentActivity[0].risk}%` : ''}
+                  {recentActivity[0].rainfall !== null && recentActivity[0].rainfall !== undefined ? ` • Rain: ${recentActivity[0].rainfall.toFixed(1)}mm` : ''}
                 </div>
               )}
             </div>
@@ -180,7 +228,7 @@ export default function PortalPage() {
 
         <div style={{ background: '#fff', borderRadius: 10, padding: 16, boxShadow: '0 6px 18px rgba(20,40,80,0.04)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 12h18" stroke="#000" strokeWidth="1.2" strokeLinecap="round"/><path d="M12 3v18" stroke="#000" strokeWidth="1.2" strokeLinecap="round"/></svg>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 12h18" stroke="#000" strokeWidth="1.2" strokeLinecap="round" /><path d="M12 3v18" stroke="#000" strokeWidth="1.2" strokeLinecap="round" /></svg>
             <div>
               <div style={{ fontSize: 12, color: '#666' }}>Last Update</div>
               <div style={{ fontSize: 16, fontWeight: 700 }}>{lastUpdate || '—'}</div>
@@ -216,10 +264,13 @@ export default function PortalPage() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
                     <div>
                       <div style={{ fontWeight: 700 }}>{r.name}</div>
-                      <div style={{ fontSize: 13, color: '#444' }}>{r.district ? `District: ${r.district}` : ''}</div>
+                      <div style={{ fontSize: 13, color: '#444' }}>
+                        {r.district ? `District: ${r.district}` : ''}
+                        {r.rainfall !== undefined ? ` • Rain: ${r.rainfall.toFixed(1)}mm` : ''}
+                      </div>
                     </div>
                     <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontWeight: 800 }}>{r.risk !== null && r.risk !== undefined ? `${r.risk}` : '—'}</div>
+                      <div style={{ fontWeight: 800, color: r.risk >= 80 ? '#dc3545' : r.risk >= 60 ? '#ffc107' : '#28a745' }}>{r.risk !== null && r.risk !== undefined ? `${r.risk}%` : '—'}</div>
                       <div style={{ fontSize: 12, color: '#666' }}>{r.predictedDate || '—'}</div>
                     </div>
                   </div>

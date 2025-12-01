@@ -12,6 +12,7 @@ import {
   useMapEvents,
   CircleMarker,
 } from "react-leaflet";
+import ChatComponent from "./ChatComponent";
 
 type RainPoint = {
   lat: number;
@@ -853,7 +854,9 @@ const MapComponent: React.FC = () => {
         <MapClickHandler onClick={onMapClick} />
       </MapContainer>
 
-    </div >
+
+      <ChatComponent contextData={{ scanResults, rainfallUpdates, riskInfo }} />
+    </div>
   );
 };
 

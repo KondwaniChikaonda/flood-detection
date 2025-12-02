@@ -8,6 +8,12 @@ export default function PortalPage() {
   const [recentActivity, setRecentActivity] = useState<any[]>([]);
   const [rainfallData, setRainfallData] = useState<any[]>([]);
 
+  // Alert modal state
+  const [showAlertModal, setShowAlertModal] = useState(false);
+  const [alertMessage, setAlertMessage] = useState('');
+  const [alertSeverity, setAlertSeverity] = useState<'High' | 'Moderate' | 'Watch'>('High');
+  const [selectedProviders, setSelectedProviders] = useState<string[]>([]);
+
   // Load rainfall data
   useEffect(() => {
     const fetchRainfall = async () => {
@@ -183,6 +189,42 @@ export default function PortalPage() {
     w.print();
   };
 
+  const handleProviderToggle = (provider: string) => {
+    setSelectedProviders(prev =>
+      prev.includes(provider)
+        ? prev.filter(p => p !== provider)
+        : [...prev, provider]
+    );
+  };
+
+  const handleSendAlert = () => {
+    if (!alertMessage.trim()) {
+      alert('Please enter an alert message');
+      return;
+    }
+    if (selectedProviders.length === 0) {
+      alert('Please select at least one telecommunications provider');
+      return;
+    }
+
+    // Log alert details (in production, this would call an API)
+    console.log('Sending alert:', {
+      message: alertMessage,
+      severity: alertSeverity,
+      providers: selectedProviders,
+      timestamp: new Date().toISOString()
+    });
+
+    // Show success message
+    alert(`Alert sent to: ${selectedProviders.join(', ')}`);
+
+    // Reset form and close modal
+    setAlertMessage('');
+    setAlertSeverity('High');
+    setSelectedProviders([]);
+    setShowAlertModal(false);
+  };
+
   return (
     <div id="portal-content" style={{ padding: 28, fontFamily: 'Inter, system-ui, -apple-system, Roboto, sans-serif', background: '#f4f6f8', minHeight: '100vh', color: '#000' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
@@ -285,12 +327,84 @@ export default function PortalPage() {
           <div style={{ background: '#fff', borderRadius: 10, padding: 16, boxShadow: '0 6px 18px rgba(20,40,80,0.04)' }}>
             <h4 style={{ marginTop: 0 }}>Quick Actions</h4>
             <button onClick={() => window.location.href = '/map'} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, marginBottom: 8, border: 'none', background: '#000', color: '#fff' }}>View Live Map</button>
-            <button style={{ width: '100%', padding: '10px 12px', borderRadius: 8, marginBottom: 8 }}>Create Alert</button>
+            <button onClick={() => setShowAlertModal(true)} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, marginBottom: 8, border: 'none', background: '#ff7043', color: '#fff', cursor: 'pointer' }}>Create Alert</button>
             <button onClick={() => exportCSV(alerts, 'alerts.csv')} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, marginBottom: 8 }}>Export CSV</button>
             <button onClick={() => exportPDF()} style={{ width: '100%', padding: '10px 12px', borderRadius: 8 }}>Export PDF</button>
           </div>
         </aside>
       </div>
+
+      {/* Alert Creation Modal */}
+      {showAlertModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: '#fff', borderRadius: 12, padding: 24, maxWidth: 500, width: '90%', maxHeight: '90vh', overflow: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>Create Flood Alert</h2>
+              <button onClick={() => setShowAlertModal(false)} style={{ background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', padding: 0, color: '#666' }}>×</button>
+            </div>
+
+            {/* Alert Severity */}
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: 'block', marginBottom: 8, fontWeight: 600, color: '#333' }}>Alert Severity</label>
+              <select
+                value={alertSeverity}
+                onChange={(e) => setAlertSeverity(e.target.value as any)}
+                style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14 }}
+              >
+                <option value="High">High - Urgent Action Required</option>
+                <option value="Moderate">Moderate - Prepare for Flooding</option>
+                <option value="Watch">Watch - Monitor Situation</option>
+              </select>
+            </div>
+
+            {/* Alert Message */}
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: 'block', marginBottom: 8, fontWeight: 600, color: '#333' }}>Alert Message</label>
+              <textarea
+                value={alertMessage}
+                onChange={(e) => setAlertMessage(e.target.value)}
+                placeholder="Enter flood alert message..."
+                rows={4}
+                style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, resize: 'vertical', fontFamily: 'inherit' }}
+              />
+            </div>
+
+            {/* Telecommunications Providers */}
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ display: 'block', marginBottom: 12, fontWeight: 600, color: '#333' }}>Send Alert To:</label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {['Airtel', 'TNM', 'MBC (Malawi Broadcasting Corporation)', 'Times TV', 'Zodiak Broadcasting', 'Radio Maria', 'Other Providers'].map(provider => (
+                  <label key={provider} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 10, borderRadius: 8, border: '1px solid #eee', cursor: 'pointer', background: selectedProviders.includes(provider) ? '#f0f7ff' : '#fff' }}>
+                    <input
+                      type="checkbox"
+                      checked={selectedProviders.includes(provider)}
+                      onChange={() => handleProviderToggle(provider)}
+                      style={{ width: 18, height: 18, cursor: 'pointer' }}
+                    />
+                    <span style={{ fontSize: 14, color: '#333' }}>{provider}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setShowAlertModal(false)}
+                style={{ padding: '10px 20px', borderRadius: 8, border: '1px solid #ddd', background: '#fff', cursor: 'pointer', fontSize: 14 }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSendAlert}
+                style={{ padding: '10px 20px', borderRadius: 8, border: 'none', background: '#ff7043', color: '#fff', cursor: 'pointer', fontSize: 14, fontWeight: 600 }}
+              >
+                Send Alert
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

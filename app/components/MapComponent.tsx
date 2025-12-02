@@ -535,9 +535,9 @@ const MapComponent: React.FC = () => {
   };
 
   return (
-    <div style={{ height: "100vh", width: "100%", position: "relative", fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
+    <div style={{ height: "100vh", width: "100%", position: "relative", marginLeft: "20px", fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
       <div style={{ position: "absolute", zIndex: 600, left: 10, top: 10, width: 360, maxHeight: '85vh', overflow: 'auto', background: 'rgba(255,255,255,0.97)', padding: 16, borderRadius: 12, color: '#1a1a1a', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
-        <h2 style={{ margin: '0 0 16px 0', fontSize: 20, fontWeight: 700, color: '#0066cc' }}>Malawi Flood Risk Monitor</h2>
+        <h2 style={{ margin: '0 0 16px 0', fontSize: 20, fontWeight: 700, color: '#0066cc', textAlign: "center" }}>Malawi Flood Risk Monitor</h2>
 
         <div style={{ marginBottom: 16, padding: 12, background: '#f0f7ff', borderRadius: 8, border: '1px solid #b3d9ff' }}>
           <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>

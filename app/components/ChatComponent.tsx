@@ -145,7 +145,7 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ contextData }) => {
                         {isLoading && (
                             <div style={{ display: "flex", justifyContent: "flex-start", marginBottom: 12 }}>
                                 <div style={{ background: "white", padding: "10px 14px", borderRadius: 12, border: "1px solid #e0e0e0", borderBottomLeftRadius: 4 }}>
-                                    <span style={{ display: "inline-block", animation: "pulse 1s infinite" }}>typing...</span>
+                                    <span style={{ display: "inline-block", color: "black", animation: "pulse 1s infinite" }}>typing...</span>
                                 </div>
                             </div>
                         )}
@@ -165,6 +165,7 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ contextData }) => {
                                 borderRadius: 20,
                                 border: "1px solid #ccc",
                                 fontSize: 14,
+                                color: "black",
                                 outline: "none"
                             }}
                         />

@@ -3,7 +3,6 @@
 import React from 'react';
 import dynamic from 'next/dynamic';
 
-// Dynamically load MapComponent to ensure it only renders on client
 const MapComponent = dynamic(() => import('../components/MapComponent'), { ssr: false });
 
 const MapPage: React.FC = () => {

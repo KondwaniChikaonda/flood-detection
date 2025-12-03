@@ -8,13 +8,11 @@ export default function PortalPage() {
   const [recentActivity, setRecentActivity] = useState<any[]>([]);
   const [rainfallData, setRainfallData] = useState<any[]>([]);
 
-  // Alert modal state
   const [showAlertModal, setShowAlertModal] = useState(false);
   const [alertMessage, setAlertMessage] = useState('');
   const [alertSeverity, setAlertSeverity] = useState<'High' | 'Moderate' | 'Watch'>('High');
   const [selectedProviders, setSelectedProviders] = useState<string[]>([]);
 
-  // Load rainfall data
   useEffect(() => {
     const fetchRainfall = async () => {
       try {

@@ -90,7 +90,6 @@ const MapComponent: React.FC = () => {
   const [rainfallUpdates, setRainfallUpdates] = useState<any[]>([]);
   const mapRef = useRef<any>(null);
 
-  // Load rainfall data
   useEffect(() => {
     const fetchRainfall = async () => {
       try {

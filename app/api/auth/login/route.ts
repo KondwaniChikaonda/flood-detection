@@ -14,7 +14,7 @@ export async function POST(req: Request) {
     const ok = await bcrypt.compare(password, user.password_hash);
     if (!ok) return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
 
-    // For demo purposes return a minimal user object. Replace with JWT or session in production.
+
     return NextResponse.json({ id: user.id, name: user.name, email: user.email, role: user.role });
   } catch (e) {
     console.error('/api/auth/login error', e);

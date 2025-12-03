@@ -11,8 +11,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'Invalid layer' }, { status: 400 });
   }
 
-  // Bounding box roughly covering Malawi (expanded to include southern districts like Chikwawa/Thyolo/Nsanje)
-  // Source bbox expanded slightly to account for data inaccuracies
+
   const minLng = 32.0;
   const minLat = -17.5;
   const maxLng = 36.5;

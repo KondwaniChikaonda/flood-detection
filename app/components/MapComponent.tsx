@@ -29,7 +29,6 @@ const MalawiBbox = {
   maxLng: 35.92,
 };
 
-// Legend component
 const Legend: React.FC = () => {
   const map = useMap();
   useEffect(() => {
@@ -119,7 +118,7 @@ const MapComponent: React.FC = () => {
     fetchRainfall();
   }, []);
 
-  // Load geo layers
+ 
   useEffect(() => {
     const load = async () => {
       try {
@@ -144,14 +143,14 @@ const MapComponent: React.FC = () => {
     load();
   }, []);
 
-  // Load top-10 high-risk areas on mount with full risk calculation
+  
   useEffect(() => {
     const loadTopAreas = async () => {
       try {
         const res = await fetch('/api/search?layer=areas&limit=10');
         const data = await res.json();
         if (data?.features?.length) {
-          // Wait for rainfall data to be available
+         
           const checkRainfall = setInterval(async () => {
             if (rainfallData.length > 0) {
               clearInterval(checkRainfall);
@@ -184,7 +183,7 @@ const MapComponent: React.FC = () => {
                   }
                 }
 
-                // Fallback to database risk_score if calculation failed
+                
                 if (r === null) {
                   const raw = props?.risk_score ?? null;
                   r = normalizeRisk(raw);
@@ -215,7 +214,6 @@ const MapComponent: React.FC = () => {
                 };
               }));
 
-              // Sort by risk (descending)
               enrichedAreas.sort((a, b) => {
                 const riskA = a.risk ?? -1;
                 const riskB = b.risk ?? -1;
@@ -226,7 +224,7 @@ const MapComponent: React.FC = () => {
             }
           }, 100);
 
-          // Timeout after 5 seconds if rainfall data doesn't load
+        
           setTimeout(() => clearInterval(checkRainfall), 5000);
         }
       } catch (e) {
@@ -236,19 +234,19 @@ const MapComponent: React.FC = () => {
     loadTopAreas();
   }, [rainfallData]);
 
-  // Identify high rainfall areas independently of risk score
+  
   useEffect(() => {
     const loadRainfallUpdates = async () => {
       if (rainfallData.length === 0) return;
 
-      // 1. Sort rainfall points by intensity (descending)
+      
       const sortedRain = [...rainfallData].sort((a, b) => b.intensity - a.intensity);
 
-      // 2. Take top unique points (simple spatial deduplication)
+      
       const topPoints: RainPoint[] = [];
       const used = new Set<string>();
       for (const p of sortedRain) {
-        if (p.intensity <= 0) break; // No rain
+        if (p.intensity <= 0) break; 
         const key = `${p.lat.toFixed(1)},${p.lng.toFixed(1)}`;
         if (!used.has(key)) {
           used.add(key);
@@ -262,13 +260,13 @@ const MapComponent: React.FC = () => {
         return;
       }
 
-      // 3. Fetch area details for these points
+   
       const updates = await Promise.all(topPoints.map(async (p) => {
         try {
           const res = await fetch(`/api/risk?lat=${p.lat}&lng=${p.lng}&rainfall=${p.intensity}`);
           const data = await res.json();
 
-          // We care about the location name and the rainfall, risk is secondary here
+          
           const nearestArea = data.nearestArea || {
             TA3_name: `Lat ${p.lat.toFixed(2)}, Lng ${p.lng.toFixed(2)}`,
             DISTRICT: 'Unknown Location'
@@ -279,7 +277,7 @@ const MapComponent: React.FC = () => {
           const predicted = predictFloodDateFromRisk(risk, now);
 
           return {
-            feature: { props: nearestArea }, // Mock feature structure for compatibility
+            feature: { props: nearestArea }, 
             rainfall: p.intensity,
             risk,
             predictedFloodDate: predicted.toISOString(),
@@ -293,7 +291,7 @@ const MapComponent: React.FC = () => {
         }
       }));
 
-      // 4. Filter valid and deduplicate by area name
+    
       const uniqueUpdates: any[] = [];
       const seenAreas = new Set<string>();
 
@@ -302,7 +300,7 @@ const MapComponent: React.FC = () => {
         const name = u.feature.props.TA3_name || u.feature.props.ta3_name || u.feature.props.name;
         const district = u.feature.props.DISTRICT || u.feature.props.district;
 
-        // Filter out unknown locations or raw coordinates
+       
         if (!name || name.startsWith('Lat ') || district === 'Unknown Location') continue;
 
         if (!seenAreas.has(name)) {
@@ -360,7 +358,7 @@ const MapComponent: React.FC = () => {
         }
       }
 
-      // Enrich search results
+     
       try {
         const top = data.features ? data.features.slice(0, searchLayer === 'areas' ? 5 : (searchLayer === 'districts' ? 10 : 8)) : [];
         const enriched = await Promise.all(
@@ -505,7 +503,7 @@ const MapComponent: React.FC = () => {
           const enriched = { risk: r, advice, predictedFloodDate: predicted.toISOString(), currentDate: now.toISOString(), nearestArea: nearestArea || { TA3_name: props?.TA3_name || props?.ta3_name, DISTRICT: props?.DISTRICT || props?.district }, rainfall: rf, dist_m };
           return { feature: { id: props?.id || props?.gid || '', props }, risk: r, dist_m: dist_m, rainfall: rf, currentDate: now.toISOString(), predictedFloodDate: predicted.toISOString(), advice, enriched };
         }));
-        // Sort by risk (descending)
+      
         items.sort((a, b) => {
           const riskA = a.risk ?? -1;
           const riskB = b.risk ?? -1;

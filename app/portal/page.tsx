@@ -45,16 +45,16 @@ export default function PortalPage() {
   useEffect(() => {
     if (rainfallData.length === 0) return;
 
-    // set client-side last update string to avoid SSR/CSR mismatch
+    
     setLastUpdate(new Date().toLocaleString());
 
-    // fetch top risk areas for recent activity and enrich with district, risk and predicted date
+    
     (async () => {
       try {
         const res = await fetch('/api/search?layer=areas&limit=10&includeGeom=true');
         const data = await res.json();
         if (data?.features) {
-          // map and enrich each feature
+         
           const enrichPromises = data.features.map(async (f: any) => {
             const props = f.properties || {};
             const name = props?.TA3_name || props?.ta3_name || props?.TA || props?.ta || props?.name || 'Unknown';
@@ -63,12 +63,11 @@ export default function PortalPage() {
             let risk: number | null = null;
             let rainfall: number | null = null;
 
-            // compute centroid from geometry if available
             let lat: number | undefined;
             let lng: number | undefined;
             if (f.geometry && f.geometry.type && f.geometry.coordinates) {
               const geom = f.geometry;
-              // Simple centroid logic
+           
               if (geom.type === 'Point') {
                 lng = geom.coordinates[0];
                 lat = geom.coordinates[1];
@@ -91,7 +90,7 @@ export default function PortalPage() {
             }
 
             if (lat !== undefined && lng !== undefined) {
-              // Find nearest rainfall
+            
               const nearestRain = rainfallData.reduce((acc, p) => {
                 const d = Math.hypot(p.lat - lat!, p.lng - lng!);
                 return d < acc.d ? { p, d } : acc;
@@ -107,10 +106,10 @@ export default function PortalPage() {
               }
             }
 
-            // Fallback to server risk if calculation failed
+      
             if (risk === null && typeof props?.risk_score === 'number') risk = props.risk_score;
 
-            // compute predicted date from risk (simple heuristic)
+            
             const predictFloodDateFromRisk = (r: number | null, base = new Date()) => {
               if (r === null || typeof r === 'undefined') return 'Unknown';
               const days = r >= 80 ? 1 : r >= 60 ? 3 : r >= 40 ? 7 : r >= 20 ? 14 : 30;
@@ -136,7 +135,7 @@ export default function PortalPage() {
 
           const items = await Promise.all(enrichPromises);
 
-          // Sort by risk (descending)
+        
           items.sort((a, b) => {
             const riskA = a.risk ?? -1;
             const riskB = b.risk ?? -1;
@@ -145,7 +144,7 @@ export default function PortalPage() {
 
           setRecentActivity(items);
 
-          // generate alerts from high-risk recentActivity
+          
           const generatedAlerts: any[] = items.flatMap((it) => {
             if (!it || typeof it.risk !== 'number' || it.risk < 40) return []; // Only alert for risk >= 40
             const level = it.risk >= 80 ? 'High' : it.risk >= 60 ? 'Moderate' : 'Watch';
@@ -174,7 +173,7 @@ export default function PortalPage() {
   };
 
   const exportPDF = () => {
-    // simple printable view - user can Save as PDF
+
     const content = document.getElementById('portal-content');
     if (!content) return;
     const w = window.open('', '_blank');
@@ -213,10 +212,10 @@ export default function PortalPage() {
       timestamp: new Date().toISOString()
     });
 
-    // Show success message
+ 
     alert(`Alert sent to: ${selectedProviders.join(', ')}`);
 
-    // Reset form and close modal
+ 
     setAlertMessage('');
     setAlertSeverity('High');
     setSelectedProviders([]);

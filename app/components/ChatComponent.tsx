@@ -152,7 +152,7 @@ const ChatComponent: React.FC<ChatComponentProps> = ({ contextData }) => {
                         <div ref={messagesEndRef} />
                     </div>
 
-                    {/* Input */}
+                    {}
                     <form onSubmit={handleSubmit} style={{ padding: 12, borderTop: "1px solid #e0e0e0", background: "white", display: "flex", gap: 8 }}>
                         <input
                             type="text"

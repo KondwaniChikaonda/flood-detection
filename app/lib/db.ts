@@ -1,16 +1,18 @@
 import { Pool } from 'pg';
+require('dotenv').config();
+const { Pool } = require('pg');
 
-// Database configuration - match user's provided credentials
 const pool = new Pool({
-  host: 'localhost',
-  port: 5433,
-  database: 'flood',
-  user: 'postgres',
-  password: 'konchi22',
-  max: 5,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
+  host: process.env.DB_HOST,
+  port: process.env.DB_PORT,
+  database: process.env.DB_NAME,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  max: process.env.DB_MAX,
+  idleTimeoutMillis: process.env.DB_IDLE,
+  connectionTimeoutMillis: process.env.DB_TIMEOUT,
 });
+
 
 let isConnected = false;
 

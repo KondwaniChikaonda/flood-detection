@@ -7,15 +7,14 @@ export async function GET(req: Request) {
   const lng = url.searchParams.get('lng');
   const rainfall = parseFloat(url.searchParams.get('rainfall') || '0');
 
-  // support search-style params: q, layer, district, limit
   const qparam = url.searchParams.get('q') || '';
   const layer = url.searchParams.get('layer') || '';
   const districtFilter = url.searchParams.get('district') || '';
   const limitParam = url.searchParams.get('limit') || '';
 
-  // If search-style request (layer or q present), reuse search logic and return FeatureCollection
+  
   if (layer || qparam) {
-    // allow empty query when asking for default top areas
+    
     if (!qparam && layer !== 'areas') return NextResponse.json({ features: [] });
     try {
       const LAYER_TABLES: Record<string, string> = {
@@ -75,7 +74,7 @@ export async function GET(req: Request) {
           const geom = r.geom_geojson;
           if (!geom || !geom.type) return null;
           const props = r.props || {};
-          // include risk from stored risk_score if available
+         
           const riskRaw = props?.risk_score ?? null;
           const risk = typeof riskRaw === 'number' ? Math.max(0, Math.min(100, Math.round(riskRaw))) : null;
           props.risk = risk;
@@ -90,7 +89,7 @@ export async function GET(req: Request) {
     }
   }
 
-  // fallback: single-point risk calculation using lat/lng
+
   const latNum = parseFloat(lat || '0');
   const lngNum = parseFloat(lng || '0');
   if (!latNum || !lngNum) return NextResponse.json({ error: 'lat,lng required' }, { status: 400 });
@@ -108,7 +107,7 @@ export async function GET(req: Request) {
     const nearest = res.rows[0];
     const dist = nearest ? nearest.dist_m : null;
 
-    // risk score 0-100 (base by proximity then scaled by rainfall)
+ 
     let base = 0;
     if (dist === null) base = 10;
     else if (dist < 50) base = 90;
@@ -117,13 +116,10 @@ export async function GET(req: Request) {
     else if (dist < 2000) base = 25;
     else base = 5;
 
-    // New formula: Base risk from proximity + significant rainfall impact
-    // If rainfall is high (>10mm), it should add substantial risk even if far from river
-    const rainfallRisk = Math.min(50, rainfall * 5); // Cap rainfall contribution at 50%
+    
     const rawRisk = Math.round(base * (1 + rainfall / 20) + rainfallRisk);
     const risk = Math.max(0, Math.min(100, rawRisk));
 
-    // attempt to find the containing TA3 area from districts_enum
     let nearestArea: any = null;
     try {
       const aSql = `

@@ -20,7 +20,7 @@ export async function POST(req: Request) {
             );
         }
 
-        // Construct system instruction with context
+   
         const systemInstruction = `
 You are an intelligent flood risk assistant for Malawi.
 You have access to real-time data about flood risks and rainfall.
@@ -37,15 +37,15 @@ Your goal is to help users understand this data.
 - Do not make up data. Only use what is provided in the context.
 `;
 
-        // Get the user's latest message
+   
         const userMessage = messages[messages.length - 1]?.content || "";
 
-        // Build the prompt with context
+    
         const prompt = `${systemInstruction}
 
 User Question: ${userMessage}`;
 
-        // Gemini API payload - matching the working Node.js structure
+   
         const geminiPayload = {
             contents: [{ parts: [{ text: prompt }] }],
         };
@@ -67,7 +67,7 @@ User Question: ${userMessage}`;
 
         const data = await response.json();
 
-        // Extract text from response
+  
         const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "I couldn't generate a response.";
 
         return NextResponse.json({ role: "assistant", content: text });

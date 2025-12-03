@@ -8,27 +8,27 @@ export async function GET(req: Request) {
   const districtFilter = url.searchParams.get('district') || '';
   const limitParam = url.searchParams.get('limit') || '';
 
-  // allow empty query when asking for default top areas
+ 
   if (!q && layer !== 'areas') return NextResponse.json({ features: [] });
 
   try {
-    // whitelist allowed tables to avoid SQL injection
+    
     const LAYER_TABLES: Record<string, string> = {
       districts: 'districts_enum',
       roads: 'roads',
       rivers: 'rivers',
-  areas: 'districts_enum' // areas are stored in the districts_enum table (TA3_name + DISTRICT)
+  areas: 'districts_enum' 
     };
 
     const table = LAYER_TABLES[layer] || LAYER_TABLES.districts;
 
-    // choose searchable columns per layer to avoid missing column errors
+
     let whereClause = '';
     if (layer === 'districts') {
-      // search district-level names and also allow TA3_name and TA fields (use quoted names)
+      
       whereClause = `("DISTRICT" ILIKE $1 OR "TA" ILIKE $1 OR "TA3_name" ILIKE $1)`;
     } else if (layer === 'areas') {
-      // TA3_name contains smaller area names; allow optional district exact/like filter
+      
       whereClause = `("TA3_name" ILIKE $1 OR "DISTRICT" ILIKE $1)`;
       if (districtFilter) whereClause += ` AND "DISTRICT" ILIKE $2`;
     } else if (layer === 'roads') {
@@ -36,10 +36,9 @@ export async function GET(req: Request) {
     } else if (layer === 'rivers') {
       whereClause = `(name ILIKE $1 OR name_en ILIKE $1 OR waterway ILIKE $1)`;
     } else {
-      whereClause = `(to_jsonb(t)::text ILIKE $1)`; // fallback: search any text
-    }
+      whereClause = `(to_jsonb(t)::text ILIKE $1)`; 
 
-    // If asking for default areas (no q) return top 5 by risk_score
+    
     let sql: string;
     let params: any[];
   const limit = limitParam ? parseInt(limitParam, 10) || 5 : 5;

@@ -18,8 +18,7 @@ let isConnected = false;
 
 export async function connect() {
   try {
-    // Try to get a client and release it immediately to validate connection
-    const client = await pool.connect();
+    
     client.release();
     if (!isConnected) {
       console.log('[db] Connected to Postgres ✅');

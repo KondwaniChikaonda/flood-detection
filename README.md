@@ -35,3 +35,7 @@ The easiest way to deploy your Next.js app is to use the [Vercel Platform](https
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
 # flood-detection
+# Flood Detection Web Application
+
+This is a web-based flood detection and mapping system that identifies flood-prone zones using geospatial analysis, satellite data, and machine learning algorithms. The system allows users to visualize risk areas on an interactive map and supports integration with real-time environmental data sources.
+
